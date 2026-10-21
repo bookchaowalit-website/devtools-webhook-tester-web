@@ -114,7 +114,7 @@ export default function Home() {
             <button type="button" className="slip-button" onClick={handleCopy} disabled={!hookUrl}>{copied ? "Copied" : "Copy address"}</button>
             <button type="button" className="slip-button dark" onClick={handleSendTest} disabled={!hookId || sending}>{sending ? "Sending…" : "Send test"}</button>
           </div>
-          <p className="slip-footnote">Requests stay in server memory for up to an hour and can disappear on restart. This is a debugging desk, not a durable event archive.</p>
+          <p className="slip-footnote">Requests stay in server memory for up to an hour and can disappear on restart. This is a debugging desk, not a durable event archive. Authorization, Cookie, API-key and token headers are saved as “redacted” and sender IPs are dropped, because anyone with the address can read the queue.</p>
         </section>
 
         <section className="mailroom" aria-labelledby="mailroom-heading">

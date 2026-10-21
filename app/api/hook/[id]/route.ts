@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { captureRequest } from "@/lib/webhook-store";
+import { sanitizeHeaders } from "@/lib/redact-headers";
 
 async function handle(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const headers: Record<string, string> = {};
-  req.headers.forEach((value, key) => {
-    headers[key] = value;
-  });
+  const headers = sanitizeHeaders(req.headers);
   const body = await req.text();
 
   captureRequest(id, {
