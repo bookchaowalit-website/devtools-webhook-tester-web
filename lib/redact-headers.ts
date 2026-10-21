@@ -14,15 +14,19 @@ const SENSITIVE_EXACT = new Set([
 // Token-like names: x-api-key, x-auth-token, x-client-secret, x-session-id, ...
 const SENSITIVE_PATTERN = /(api[-_]?key|token|secret|passw(or)?d|session|credential|auth)/i;
 
-// Sender IP / geo headers added by proxies and the hosting edge.
+// Sender IP headers added by proxies, plus every x-vercel-* header: the
+// hosting edge injects the project's OIDC token, internal cache credentials,
+// proxy signatures and geo/IP data there, none of which the sender sent.
 const DROPPED_EXACT = new Set([
   "x-forwarded-for",
   "x-real-ip",
   "forwarded",
   "cf-connecting-ip",
   "true-client-ip",
+  "x-invocation-id",
+  "x-matched-path",
 ]);
-const DROPPED_PATTERN = /^x-vercel-(forwarded-for|ip-)/i;
+const DROPPED_PATTERN = /^x-vercel-/i;
 
 export function isSensitiveHeader(name: string): boolean {
   const key = name.toLowerCase();

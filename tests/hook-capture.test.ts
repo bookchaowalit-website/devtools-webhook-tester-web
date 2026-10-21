@@ -29,7 +29,6 @@ describe("POST /api/hook/[id] header capture", () => {
       "x-access-token": "tok2-should-not-be-stored",
       "x-client-secret": "secret-should-not-be-stored",
       "x-session-id": "sess-should-not-be-stored",
-      "x-vercel-oidc-token": "oidc-should-not-be-stored",
     };
     const stored = await capture({ "content-type": "application/json", ...secrets });
 
@@ -49,6 +48,22 @@ describe("POST /api/hook/[id] header capture", () => {
       "x-vercel-forwarded-for": "203.0.113.7",
     });
     expect(JSON.stringify(stored)).not.toContain("203.0.113.7");
+  });
+
+  it("drops hosting-platform internals the sender never sent", async () => {
+    const stored = await capture({
+      "x-vercel-oidc-token": "eyJ-oidc-should-not-be-stored",
+      "x-vercel-sc-headers": '{"Authorization":"Bearer sc-should-not-be-stored"}',
+      "x-vercel-proxy-signature": "Bearer proxy-sig-should-not-be-stored",
+      "x-vercel-proxied-for": "203.0.113.8",
+      "x-vercel-ja4-digest": "ja4-fingerprint",
+      "x-vercel-ip-city": "Bangkok",
+    });
+    const serialized = JSON.stringify(stored);
+    for (const leaked of ["oidc-should", "sc-should", "proxy-sig-should", "203.0.113.8", "ja4-fingerprint", "Bangkok"]) {
+      expect(serialized).not.toContain(leaked);
+    }
+    expect(Object.keys(stored.headers).filter((name) => name.startsWith("x-vercel-"))).toEqual([]);
   });
 
   it("keeps ordinary headers so the tester stays useful", async () => {
