@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { ensureHookId, formatHeaders, formatTime, parseRequestList, tryPrettyJson } from "@/lib/webhook-view";
 
 interface CapturedRequest {
   id: string;
@@ -9,41 +10,31 @@ interface CapturedRequest {
   headers: Record<string, string>;
   body: string;
   receivedAt: number;
+  truncated?: boolean;
 }
 
-function formatTime(timestamp: number) {
-  return new Date(timestamp).toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
-}
+const noSubscribe = () => () => {};
+let cachedHookId: string | null = null;
 
-function tryPrettyJson(body: string) {
-  if (!body.trim()) return { pretty: "(empty payload)", isJson: false };
-  try {
-    return { pretty: JSON.stringify(JSON.parse(body), null, 2), isJson: true };
-  } catch {
-    return { pretty: body, isJson: false };
-  }
+function clientHookId() {
+  cachedHookId ??= ensureHookId(window.localStorage, () => crypto.randomUUID());
+  return cachedHookId;
 }
 
 export default function Home() {
-  const [hookId, setHookId] = useState<string | null>(null);
+  // Read from localStorage on the client only; the server snapshot is null, so hydration matches.
+  const hookId = useSyncExternalStore(noSubscribe, clientHookId, () => null);
   const [requests, setRequests] = useState<CapturedRequest[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [sending, setSending] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    const existing = localStorage.getItem("webhook-tester-hook-id");
-    const id = existing ?? crypto.randomUUID();
-    if (!existing) localStorage.setItem("webhook-tester-hook-id", id);
-    setHookId(id);
-  }, []);
 
   const refresh = useCallback(async (id: string) => {
     try {
       const response = await fetch("/api/hook/" + id + "/requests", { cache: "no-store" });
-      const data = await response.json();
-      setRequests(data.requests ?? []);
+      setRequests(parseRequestList<CapturedRequest>(await response.json()));
     } catch {
       // The next polling tick retries without discarding the current queue.
     }
@@ -51,9 +42,11 @@ export default function Home() {
 
   useEffect(() => {
     if (!hookId) return;
-    refresh(hookId);
+    // First load on the next tick, then every 2.5 s; state is set only when a response arrives.
+    const first = setTimeout(() => refresh(hookId), 0);
     pollRef.current = setInterval(() => refresh(hookId), 2500);
     return () => {
+      clearTimeout(first);
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [hookId, refresh]);
@@ -145,8 +138,8 @@ export default function Home() {
             ) : (
               <div className="inspection-body">
                 <div className="inspection-meta"><span>Received</span><strong>{new Date(selected.receivedAt).toLocaleString()}</strong></div>
-                <section><h3>Headers</h3><pre>{Object.entries(selected.headers).map(([key, value]) => key + ": " + value).join("\n")}</pre></section>
-                <section><h3>Payload <small>{tryPrettyJson(selected.body).isJson ? "JSON" : "text"}</small></h3><pre>{tryPrettyJson(selected.body).pretty}</pre></section>
+                <section><h3>Headers</h3><pre>{formatHeaders(selected.headers)}</pre></section>
+                <section><h3>Payload <small>{tryPrettyJson(selected.body).isJson ? "JSON" : "text"}{selected.truncated ? " · first 64 KiB only" : ""}</small></h3><pre>{tryPrettyJson(selected.body).pretty}</pre></section>
               </div>
             )}
           </article>
