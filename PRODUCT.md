@@ -1,46 +1,47 @@
-# bookchaowalit-webhook-tester-frontend — Product brief
+# Webhook Tester — Product truth
 
-**Slug:** `bookchaowalit-website/bookchaowalit-webhook-tester-frontend`  
-**Generated:** 2026-08-11 (bulk Book Dev closeout)  
-**Status:** starter / portfolio boundary
+> Inferred from the code and copy (no user interview). Checked against the portfolio card claims review
+> (`portfolio-site-web/docs/audits/CARD-CLAIMS-REVIEW-2026-10.md`, row `webhook-tester`) on 2026-10-23.
 
-## Purpose
+## What it is
 
-Portfolio repository under Book Dev. This brief records ownership and the
-current honest status so the nested tree is not an empty shell in the task
-system.
+A temporary, account-free capture address for debugging webhooks, backed by an in-memory store on the server.
 
-## Runnable path
+## Who it is for
 
-See `README.md` for install and run instructions when present.
+A developer wiring up a webhook sender who wants to see exactly what arrives (method, headers, body) without a tunnel.
 
-## Limits
+## What works today
 
-- Not claimed as production-ready unless README and tests prove it.
-- Mobile smoke / emulator acceptance is separate and toolchain-dependent.
+1. The page creates a hook id (UUID in `localStorage`), shows its capture URL with Copy and "Send test", and polls the
+   queue every 2.5 s. Select a request to read its time, headers and pretty-printed JSON (or raw text) body; "Clear
+   queue" empties it.
+2. The capture route accepts GET, POST, PUT, PATCH and DELETE. Credential headers are stored as `[redacted]`, sender
+   IPs and `x-vercel-*` headers are dropped. Limits: 50 requests per hook, 200 hooks, 1 hour idle expiry, bodies cut
+   to 64 KiB (marked as truncated), hook ids 1-64 URL-safe characters.
+3. `/api/mcp` answers JSON-RPC with `list_requests` and `get_request` over the same store and echoes the request id.
+4. Front-end and server errors go to Sentry (errors only; request, user, breadcrumbs, extra context and stack frame
+   variables stripped, so webhook payloads and headers are never sent) when `NEXT_PUBLIC_SENTRY_DSN` is set.
 
-## Source README excerpt
+## What does not work (and must not be claimed)
 
-```
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+- No payload replay, response mocking or signature verification, and no real-time push (claims removed in the 2026-10
+  card review). The page polls.
+- Not durable: requests disappear after an hour idle, on a cold start, or when another serverless instance answers.
+- No privacy beyond the hook id: anyone who knows the URL can read and clear that queue.
 
-## Getting Started
+## Live URL and deploy state
 
-First, run the development server:
+- Live: https://webhook-tester.bookchaowalit.com (HTTP 200 on 2026-10-23).
+- The Vercel project `bookchaowalit-webhook-tester-frontend` is deployed only by CLI. Last production deployment:
+  2026-10-21, CLI, commit 38d2883 (Wave 1 header redaction). The CVE patch (Next 16.4.2) and this L2 pass are not
+  live yet: Vercel's daily deployment limit was reached on 2026-10-23 and the coordinator deploys the latest green
+  `main` later. The Git link names the old repository `bookchaowalit/bookchaowalit-webhook-tester-frontend`, so a
+  push to `main` does not deploy (owner action D9).
+- `NEXT_PUBLIC_SENTRY_DSN` is set on the Vercel project (Sentry project `devtools-webhook-tester-web`, org
+  `personal-yu0`).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Boundaries
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize an
-```
+- Stateless apart from the in-memory capture store, which is per server instance. Nothing is written to disk or a
+  database.

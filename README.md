@@ -1,42 +1,61 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Webhook Tester
 
-## Getting Started
+A temporary capture address for debugging webhooks. Open the page to get a hook URL, point a sender at it (or press
+"Send test"), and read each request's method, time, headers and body. Requests live in server memory only.
 
-First, run the development server:
+Live: https://webhook-tester.bookchaowalit.com (deployed by Vercel CLI; it can lag `main`, see `PRODUCT.md`).
+
+## What it does not do
+
+- No replay, response mocking or signature verification. No accounts, no durable storage, no real-time push (the
+  page polls every 2.5 s).
+- Captured requests vanish after an hour without access, on a cold start, or on a different server instance.
+
+## How capture works
+
+- `GET|POST|PUT|PATCH|DELETE /api/hook/<id>` stores the request. `<id>` must be 1-64 letters, digits, `-` or `_`
+  (the page uses a UUID kept in `localStorage`); anything else gets HTTP 400.
+- Credential headers (Authorization, Cookie, API-key, token, secret, session ...) are stored as `[redacted]`; sender IP
+  headers and every `x-vercel-*` header are dropped (`lib/redact-headers.ts`).
+- Limits (`lib/webhook-store.ts`): 50 requests per hook, 200 hooks, 1 hour idle expiry, bodies cut to the first 64 KiB
+  (the answer then says `"truncated": true`).
+- `GET /api/hook/<id>/requests` lists them; `DELETE` clears them. Anyone with the hook URL can read the queue.
+
+## MCP endpoint
+
+`POST /api/mcp` (JSON-RPC 2.0, the request `id` is echoed): `initialize`, `tools/list`, and `tools/call` with
+`list_requests` (`hookId`) and `get_request` (`hookId`, `requestId`) over the same store. Unknown tools and methods
+return JSON-RPC errors.
+
+## Run
 
 ```bash
+npm ci
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Checks
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm test           # Vitest: header redaction, store limits, capture + MCP routes, page helpers and render, Sentry scrubbing
+npm run lint
+npm run typecheck
+npm run build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+CI (`.github/workflows/ci.yml`) runs the shared Node workflow (with a line-coverage gate) and the shared security
+scan on every push and PR to `main`.
 
-## Learn More
+## Code map
 
-To learn more about Next.js, take a look at the following resources:
+- `lib/webhook-store.ts`: in-memory store with the limits above. `lib/redact-headers.ts`: header redaction.
+- `lib/webhook-view.ts`: hook id persistence and payload/header display helpers used by `app/page.tsx`.
+- `app/api/hook/[id]/route.ts`, `app/api/hook/[id]/requests/route.ts`, `app/api/mcp/route.ts`: the routes above.
+- `lib/sentry.ts` + `instrumentation*.ts`: error reporting to Sentry, errors only; request data, breadcrumbs, extra
+  context and stack frame variables are stripped so captured payloads never reach Sentry. Off when
+  `NEXT_PUBLIC_SENTRY_DSN` is unset.
+- `app/more-projects/page.tsx`: shared portfolio link page (copied per repository, not a package).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## License
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-
-## Related
-
-- **Mobile App:** [bookchaowalit-webhook-tester-mobile](https://github.com/bookchaowalit-mobile/bookchaowalit-webhook-tester-mobile)
-- **Portfolio:** [bookchaowalit.com](https://bookchaowalit.com)
-
+MIT
