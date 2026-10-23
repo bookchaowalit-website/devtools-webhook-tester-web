@@ -1,75 +1,88 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from "next/server";
+import { getRequests, isValidHookId } from "@/lib/webhook-store";
 
-export const runtime = 'edge';
+// Stateless JSON-RPC MCP endpoint over the same in-memory capture store the page reads.
+// Read-only: it shows what a hook captured (headers already redacted), the same data
+// GET /api/hook/<id>/requests returns to anyone who knows the hook id.
 
-interface MCPRequest {
-  jsonrpc: '2.0';
-  id: number | string;
-  method: string;
-  params?: any;
-}
+type RpcId = number | string | null;
+type RpcRequest = { id?: RpcId; method?: string; params?: { name?: unknown; arguments?: Record<string, unknown> } };
 
-interface MCPResponse {
-  jsonrpc: '2.0';
-  id: number | string;
-  result?: any;
-  error?: {
-    code: number;
-    message: string;
-  };
-}
+const TOOLS = [
+  {
+    name: "list_requests",
+    description: "List the requests a hook captured, newest first (credential headers redacted, sender IPs dropped)",
+    inputSchema: { type: "object", properties: { hookId: { type: "string" } }, required: ["hookId"] },
+  },
+  {
+    name: "get_request",
+    description: "Get one captured request by id",
+    inputSchema: {
+      type: "object",
+      properties: { hookId: { type: "string" }, requestId: { type: "string" } },
+      required: ["hookId", "requestId"],
+    },
+  },
+];
 
-async function getData() {
-  return { message: 'Sample data' };
-}
-
-export async function POST(request: NextRequest) {
-  let requestId: number | string = 0;
-
-  try {
-    const body: MCPRequest = await request.json();
-    requestId = body.id;
-    const { method, params, id } = body;
-
-    let result: any = {};
-
-    switch (method) {
-      case 'initialize':
-        result = {
-          protocolVersion: '2024-11-05',
-          capabilities: { tools: {} },
-          serverInfo: { name: 'MCP Server', version: '1.0.0' }
-        };
-        break;
-
-      case 'tools/list':
-        result = {
-          tools: [
-            {
-              name: 'get_data',
-              description: 'Get sample data',
-              inputSchema: { type: 'object', properties: {} }
-            }
-          ]
-        };
-        break;
-
-      case 'tools/call':
-        result = await getData();
-        break;
-
-      default:
-        throw new Error(`Unknown method: ${method}`);
-    }
-
-    return Response.json({ jsonrpc: '2.0', id, result });
-
-  } catch (error) {
-    return Response.json({
-      jsonrpc: '2.0',
-      id: requestId,
-      error: { code: -32603, message: error instanceof Error ? error.message : 'Internal error' }
-    }, { status: 500 });
+class RpcError extends Error {
+  constructor(readonly code: number, message: string) {
+    super(message);
   }
 }
 
+function hookIdArg(args: Record<string, unknown>): string {
+  if (!isValidHookId(args.hookId)) throw new RpcError(-32602, "hookId must be 1-64 letters, digits, '-' or '_'");
+  return args.hookId;
+}
+
+function callTool(name: unknown, args: Record<string, unknown> = {}) {
+  switch (name) {
+    case "list_requests":
+      return { requests: getRequests(hookIdArg(args)) };
+    case "get_request": {
+      const request = getRequests(hookIdArg(args)).find((entry) => entry.id === args.requestId);
+      if (!request) throw new RpcError(-32602, `No captured request with id ${String(args.requestId)}`);
+      return { request };
+    }
+    default:
+      throw new RpcError(-32602, `Unknown tool: ${String(name)}`);
+  }
+}
+
+export async function POST(request: NextRequest) {
+  let id: RpcId = null;
+  try {
+    let body: RpcRequest;
+    try {
+      body = (await request.json()) as RpcRequest;
+    } catch {
+      throw new RpcError(-32700, "Parse error");
+    }
+    if (!body || typeof body !== "object") throw new RpcError(-32600, "Invalid request");
+    id = body.id ?? null;
+    let result: unknown;
+    switch (body.method) {
+      case "initialize":
+        result = {
+          protocolVersion: "2024-11-05",
+          capabilities: { tools: {} },
+          serverInfo: { name: "Webhook Tester", version: "1.0.0" },
+        };
+        break;
+      case "tools/list":
+        result = { tools: TOOLS };
+        break;
+      case "tools/call":
+        result = callTool(body.params?.name, body.params?.arguments);
+        break;
+      default:
+        throw new RpcError(-32601, `Unknown method: ${String(body.method)}`);
+    }
+    return NextResponse.json({ jsonrpc: "2.0", id, result });
+  } catch (error) {
+    const code = error instanceof RpcError ? error.code : -32603;
+    const message = error instanceof RpcError ? error.message : "Internal error";
+    return NextResponse.json({ jsonrpc: "2.0", id, error: { code, message } }, { status: code === -32700 || code === -32600 ? 400 : 200 });
+  }
+}
