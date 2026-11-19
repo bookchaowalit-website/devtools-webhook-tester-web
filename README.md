@@ -19,7 +19,8 @@ Live: https://webhook-tester.bookchaowalit.com (deployed by Vercel CLI; it can l
   headers and every `x-vercel-*` header are dropped (`lib/redact-headers.ts`).
 - Limits (`lib/webhook-store.ts`): 50 requests per hook, 200 hooks, 1 hour idle expiry, bodies cut to the first 64 KiB
   (the answer then says `"truncated": true`).
-- `GET /api/hook/<id>/requests` lists them; `DELETE` clears them. Anyone with the hook URL can read the queue.
+- `GET /api/hook/<id>/requests` lists them; `DELETE` clears them (`?upTo=<ms>` clears only requests received up to
+  that time: the page uses it so Clear queue can be undone for 6 s without losing requests that arrive meanwhile). Anyone with the hook URL can read the queue.
 
 ## MCP endpoint
 
@@ -54,7 +55,8 @@ scan on every push and PR to `main`.
 - `lib/sentry.ts` + `instrumentation*.ts`: error reporting to Sentry, errors only; request data, breadcrumbs, extra
   context and stack frame variables are stripped so captured payloads never reach Sentry. Off when
   `NEXT_PUBLIC_SENTRY_DSN` is unset.
-- `app/more-projects/page.tsx`: shared portfolio link page (copied per repository, not a package).
+- `app/app-shell.css` + `components/app-shell.tsx`: the shared App shell (copied in, see `APP-SHELL.md`); page styles in
+  `app/globals.css`. `/more-projects` is a permanent redirect to https://bookchaowalit.com/.
 
 ## License
 

@@ -1,3 +1,12 @@
+# Webhook tester — Design
+
+Since 2026-11-19 the page uses the shared **App shell** (`APP-SHELL.md`, Geist + Geist Mono, light and dark):
+top bar, capture address card (full address wraps, one tap selects it; Send test is the one filled button), the
+incoming queue beside the request sheet (stacked on phones, with a Go to queue link), a status dot tied to the
+last poll, and Clear queue with a 6 s Undo toast instead of an instant delete.
+
+The notes below describe the earlier "Intake" look and are kept for history.
+
 # Intake — Design direction
 
 ## Product surface

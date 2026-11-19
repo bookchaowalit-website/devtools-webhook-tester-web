@@ -1,0 +1,255 @@
+/*
+ * App shell (2026-11-13): the shared calm, Apple-like look for list-style apps (services, todos,
+ * notes, reminders, habits). A sidebar of lists with counts, one list in the main pane, a compact
+ * composer, rows with a status pill. Copy this file and components/app-shell.tsx into the next
+ * app; see APP-SHELL.md.
+ *
+ * Text pairs pass 4.5:1 in both themes: --as-muted on --as-bg 4.7:1 (light) / 6.9:1 (dark),
+ * --as-accent on --as-surface 5.7:1 / 5.6:1; white on --as-button 4.8:1; pill text on its tint 5.6–6.7:1.
+ * Placeholders use --as-muted (the browser default is ~3.2:1). Input edges use --as-field-line: 3.6:1 on
+ * --as-surface and 3.3:1 on --as-bg (light), 4.1:1 / 4.9:1 (dark), because controls need 3:1; --as-line stays
+ * for dividers and cards, which are decorative.
+ */
+:root {
+  --as-bg: #f5f5f7;
+  --as-surface: #ffffff;
+  --as-fg: #1d1d1f;
+  --as-muted: #6e6e73;
+  --as-line: #d2d2d7;
+  --as-field-line: #86868b;
+  --as-hover: rgb(0 0 0 / 5%);
+  --as-selected: #e8e8ed;
+  --as-accent: #0066cc;
+  --as-button: #0071e3;
+  --as-button-hover: #0062c4;
+  --as-focus: #0071e3;
+  --as-danger: #c9252c;
+  --as-green: #136c2e; --as-green-bg: #e3f5e8;
+  --as-amber: #8a5300; --as-amber-bg: #fdf0d5;
+  --as-grey: #515154; --as-grey-bg: #ececf0;
+  --as-red: #b3261e; --as-red-bg: #fde8e6;
+  --as-shadow: 0 1px 2px rgb(0 0 0 / 4%), 0 8px 24px rgb(0 0 0 / 6%);
+  --as-font: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --as-bg: #000000; --as-surface: #1c1c1e; --as-fg: #f5f5f7; --as-muted: #a1a1a6; --as-line: #38383a; --as-field-line: #7c7c80;
+    --as-hover: rgb(255 255 255 / 6%); --as-selected: #2c2c2e; --as-accent: #2997ff; --as-focus: #2997ff; --as-danger: #ff6961;
+    --as-green: #30d158; --as-green-bg: #0f2e18; --as-amber: #ffd60a; --as-amber-bg: #3a2e00; --as-grey: #c7c7cc; --as-grey-bg: #2c2c2e; --as-red: #ff8a80; --as-red-bg: #3b1513;
+    --as-shadow: none;
+  }
+}
+
+.as { min-height: 100vh; background: var(--as-bg); color: var(--as-fg); font-family: var(--as-font); -webkit-font-smoothing: antialiased; }
+.as *, .as *::before, .as *::after { box-sizing: border-box; }
+:where(.as) :where(button, input, textarea, select) { font: inherit; color: inherit; }
+:where(.as) :focus-visible { outline: 3px solid var(--as-focus); outline-offset: 2px; }
+.as-skip { position: absolute; left: 8px; top: -64px; z-index: 50; display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 980px; background: var(--as-surface); border: 2px solid var(--as-focus); }
+.as-skip:focus { top: 8px; }
+.as-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+:where(.as) ::placeholder { color: var(--as-muted); opacity: 1; }
+
+/* Top bar */
+.as-top { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; padding: 0 clamp(16px, 4vw, 32px); background: color-mix(in srgb, var(--as-bg) 92%, transparent); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); border-bottom: 1px solid var(--as-line); }
+.as-brand { display: flex; align-items: baseline; gap: 10px; font-size: 17px; font-weight: 600; }
+.as-brand small { color: var(--as-muted); font-size: 13px; font-weight: 400; }
+.as-top nav { display: flex; gap: 4px; }
+.as-top nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; border-radius: 980px; color: var(--as-accent); font-size: 15px; text-decoration: none; }
+.as-top nav a:hover { background: var(--as-hover); }
+
+/* Layout: sidebar of lists + main pane */
+.as-body { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 24px; width: min(1120px, 100%); margin: 0 auto; padding: 24px clamp(16px, 4vw, 32px) 64px; }
+.as-side h2 { margin: 0 0 8px 12px; color: var(--as-muted); font-size: 13px; font-weight: 600; }
+.as-lists { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.as-lists button { display: flex; width: 100%; min-height: 44px; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; font-size: 15px; text-align: left; cursor: pointer; }
+.as-lists button:hover { background: var(--as-hover); }
+.as-lists button[aria-current="true"] { background: var(--as-selected); font-weight: 600; }
+.as-lists .as-count { color: var(--as-muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+/* --as-muted on the selected or hover tint is only 4.15:1; --as-grey keeps 6.5:1 light, 8.3:1 dark. */
+.as-lists button:hover .as-count, .as-lists button[aria-current="true"] .as-count { color: var(--as-grey); }
+.as-dot { display: inline-block; width: 10px; height: 10px; margin-right: 8px; border-radius: 50%; background: var(--as-muted); vertical-align: 0; }
+.as-dot[data-tone="green"] { background: var(--as-green); }
+.as-dot[data-tone="amber"] { background: #e0a100; }
+.as-dot[data-tone="grey"] { background: #8e8e93; }
+
+/* Grid items default to min-width:auto; 0 lets the phone list row scroll instead of widening the page. */
+.as-side, .as-main { min-width: 0; }
+.as-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; margin-bottom: 16px; }
+/* A long search term must wrap inside the head, not widen the page. */
+.as-head > div:first-child { min-width: 0; max-width: 100%; }
+.as-head p { overflow-wrap: anywhere; }
+.as-head h1 { margin: 0; font-size: clamp(28px, 4vw, 34px); font-weight: 700; letter-spacing: -.02em; line-height: 1.15; }
+.as-head p { margin: 4px 0 0; color: var(--as-muted); font-size: 15px; }
+.as-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.as-search input { width: min(240px, 100%); min-height: 44px; padding: 0 14px; border: 1px solid var(--as-field-line); border-radius: 980px; background: var(--as-surface); font-size: 16px; /* 16px stops iOS zooming on focus */ }
+.as-search input:focus-visible { outline: 3px solid var(--as-focus); outline-offset: 0; }
+
+/* Buttons */
+.as-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 18px; border: 0; border-radius: 980px; background: var(--as-button); color: #ffffff; font-size: 15px; font-weight: 600; cursor: pointer; }
+.as-button:hover:not(:disabled) { background: var(--as-button-hover); }
+.as-button:disabled { opacity: .4; cursor: not-allowed; }
+.as-plain { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 12px; border: 0; border-radius: 980px; background: transparent; color: var(--as-accent); font-size: 15px; cursor: pointer; }
+.as-plain:hover { background: var(--as-hover); }
+.as-plain.as-danger { color: var(--as-danger); }
+.as-button svg, .as-plain svg { width: 18px; height: 18px; flex: none; }
+
+/* Composer */
+.as-composer { display: grid; gap: 12px; margin-bottom: 16px; padding: 16px; border: 1px solid var(--as-line); border-radius: 18px; background: var(--as-surface); box-shadow: var(--as-shadow); }
+.as-field { display: grid; gap: 6px; font-size: 14px; font-weight: 600; }
+.as-field input, .as-field textarea { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--as-field-line); border-radius: 10px; background: var(--as-bg); font-size: 16px; font-weight: 400; }
+.as-field textarea { min-height: 80px; resize: vertical; line-height: 1.5; }
+.as-field input:focus-visible, .as-field textarea:focus-visible { outline: 3px solid var(--as-focus); outline-offset: 0; }
+.as-composer-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.as-composer-actions { display: flex; gap: 8px; }
+.as-segmented { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; padding: 2px; border-radius: 12px; background: var(--as-selected); }
+.as-segmented button { min-height: 44px; min-width: 88px; padding: 0 12px; border: 0; border-radius: 10px; background: transparent; font-size: 14px; cursor: pointer; }
+/* The chosen stage needs a 3:1 edge: the white fill alone is 1.22:1 on the track. A 2px --as-fg ring
+   measures 13.8:1 on the track / 16.8:1 on its fill (light) and 12.8:1 / 15.6:1 (dark). */
+.as-segmented button[aria-pressed="true"] { background: var(--as-surface); font-weight: 600; box-shadow: inset 0 0 0 2px var(--as-fg), 0 1px 3px rgb(0 0 0 / 12%); }
+.as-segmented-wrap { display: grid; gap: 6px; font-size: 14px; font-weight: 600; }
+/* High Contrast / forced colors drops the background and shadow that mark the chosen stage: use
+   the system selection colours and a visible edge instead. */
+@media (forced-colors: active) {
+  .as-segmented button { border: 1px solid ButtonText; }
+  .as-segmented button[aria-pressed="true"] { forced-color-adjust: none; background: Highlight; color: HighlightText; border: 2px solid Highlight; }
+  /* forced-color-adjust: none keeps the brand focus blue, which can vanish on the user's Canvas; the
+     ring sits outside the Highlight fill (outline-offset), so the system text colour stands out. */
+  .as-segmented button[aria-pressed="true"]:focus-visible { outline-color: CanvasText; }
+}
+
+/* Rows */
+.as-list { margin: 0; padding: 0; list-style: none; border: 1px solid var(--as-line); border-radius: 18px; background: var(--as-surface); box-shadow: var(--as-shadow); overflow: hidden; }
+.as-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 12px 8px 12px 16px; }
+.as-row + .as-row { border-top: 1px solid var(--as-line); }
+.as-row h3 { margin: 0; font-size: 16px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.as-row p { margin: 2px 0 0; color: var(--as-muted); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+/* One line of detail per row; Show more opens the full note (line breaks kept). */
+.as-row .as-row-detail { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.as-row .as-row-detail[data-expanded="true"] { white-space: pre-line; }
+.as-row .as-row-more { min-height: 44px; padding: 0; font-size: 14px; }
+.as-pill { display: inline-flex; align-items: center; min-height: 26px; padding: 0 10px; border-radius: 980px; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.as-pill[data-tone="green"] { color: var(--as-green); background: var(--as-green-bg); }
+.as-pill[data-tone="amber"] { color: var(--as-amber); background: var(--as-amber-bg); }
+.as-pill[data-tone="grey"] { color: var(--as-grey); background: var(--as-grey-bg); }
+.as-pill[data-tone="red"] { color: var(--as-red); background: var(--as-red-bg); }
+.as-dot[data-tone="red"] { background: #e5484d; }
+.as-empty { padding: 32px 16px; color: var(--as-muted); font-size: 15px; text-align: center; }
+.as-empty strong { display: block; margin-bottom: 4px; color: var(--as-fg); font-size: 17px; }
+
+/* Undo toast */
+.as-toast { position: fixed; left: 50%; bottom: 24px; z-index: 40; display: flex; max-width: calc(100vw - 32px); align-items: center; gap: 8px; padding: 4px 4px 4px 16px; border-radius: 980px; background: #1d1d1f; color: #f5f5f7; box-shadow: 0 8px 24px rgb(0 0 0 / 20%); font-size: 15px; transform: translateX(-50%); }
+.as-toast span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.as-toast .as-plain { flex: none; color: #64d2ff; }
+
+.as-note { margin: 16px 0 0; color: var(--as-muted); font-size: 14px; line-height: 1.6; }
+.as-foot { display: flex; flex-wrap: wrap; gap: 0 20px; width: min(1120px, 100%); margin: 0 auto; padding: 8px clamp(16px, 4vw, 32px) 32px; border-top: 1px solid var(--as-line); font-size: 14px; }
+.as-foot a { display: inline-flex; align-items: center; min-height: 44px; color: var(--as-muted); text-decoration: none; }
+.as-foot a:hover { color: var(--as-fg); text-decoration: underline; text-underline-offset: 3px; }
+
+/* Phones: the sidebar becomes a scrollable row of lists above the main pane. */
+@media (max-width: 760px) {
+  .as-body { grid-template-columns: 1fr; gap: 12px; padding-top: 16px; }
+  .as-side h2 { display: none; }
+  .as-brand small { display: none; }
+  .as-lists { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 6px; margin: -6px; }
+  .as-lists button { width: auto; white-space: nowrap; border: 1px solid var(--as-line); border-radius: 980px; background: var(--as-surface); }
+  .as-lists button[aria-current="true"] { border-color: var(--as-fg); background: var(--as-fg); color: var(--as-bg); }
+  .as-lists button[aria-current="true"] .as-count { color: inherit; }
+  .as-tools, .as-search, .as-search input { width: 100%; }
+  .as-tools .as-button { flex: 1; }
+  .as-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .as-row .as-plain { grid-column: 2; grid-row: 1 / span 2; }
+  .as-row .as-pill { grid-column: 1; justify-self: start; }
+  /* Wrap onto a second row rather than squeeze: four choices need ~380px in one row. */
+  .as-segmented-wrap { min-width: 0; width: 100%; }
+  .as-segmented { width: 100%; grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); }
+  .as-segmented button { min-width: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .as *, .as *::before, .as *::after { transition: none !important; } }
+
+/* Added with todo-board (2026-11-13): a round check like Reminders, inside a 44px hit area. */
+.as-row-check { grid-template-columns: 44px minmax(0, 1fr) auto auto; padding-left: 4px; }
+.as-check { position: relative; display: grid; place-items: center; width: 44px; height: 44px; cursor: pointer; }
+.as-check input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+/* Unchecked ring uses --as-muted: 5.1:1 on white, 6.9:1 on dark (--as-line was 1.5:1, under the 3:1 non-text minimum). */
+.as-check span { width: 24px; height: 24px; border: 2px solid var(--as-muted); border-radius: 50%; transition: background-color .15s ease, border-color .15s ease; }
+.as-check input:checked + span { border-color: var(--as-button); background: var(--as-button) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 12.5 4 4 8-9'/%3E%3C/svg%3E") center / 16px no-repeat; }
+.as-check:has(input:focus-visible) span { outline: 3px solid var(--as-focus); outline-offset: 2px; }
+.as-row[data-done="true"] h3 { color: var(--as-muted); text-decoration: line-through; }
+.as-chips { display: flex; flex-wrap: wrap; gap: 12px 24px; }
+@media (max-width: 760px) {
+  .as-row-check { grid-template-columns: 44px minmax(0, 1fr) auto; }
+  .as-row-check .as-plain { grid-column: 3; grid-row: 1 / span 2; }
+  .as-row-check .as-pill { grid-column: 2; }
+}
+.as-actions-row { display: flex; justify-content: flex-end; margin-top: 8px; }
+.as-head > div:first-child { min-width: 0; max-width: 100%; }
+
+/* Added with checklists (2026-11-14): a single-column content app without a sidebar. */
+.as-brand-link { color: inherit; text-decoration: none; min-height: 44px; align-items: center; }
+.as-page { width: min(760px, 100%); margin: 0 auto; padding: clamp(24px, 5vw, 48px) clamp(16px, 4vw, 32px) 64px; }
+.as-intro { margin-bottom: 20px; }
+.as-intro h1 { margin: 4px 0 0; font-size: clamp(32px, 5vw, 44px); font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.as-intro p { margin: 8px 0 0; color: var(--as-muted); font-size: 17px; line-height: 1.5; }
+.as-intro .as-pill { margin-top: 12px; }
+.as-eyebrow { margin: 0; color: var(--as-muted); font-size: 14px; font-weight: 600; }
+.as-list-links { padding: 0; }
+.as-row-link { display: grid; grid-template-columns: minmax(0, 1fr) auto 16px; align-items: center; gap: 12px; min-height: 64px; padding: 14px 16px; color: inherit; text-decoration: none; }
+.as-list-links li + li .as-row-link { border-top: 1px solid var(--as-line); }
+.as-row-link:hover { background: var(--as-hover); }
+.as-row-link:focus-visible { outline: 3px solid var(--as-focus); outline-offset: -3px; }
+.as-row-meta { font-size: 13px !important; }
+.as-chevron { color: var(--as-muted); font-size: 22px; line-height: 1; }
+.as-run { display: grid; gap: 20px; }
+.as-progress-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 12px; padding: 16px; border: 1px solid var(--as-line); border-radius: 18px; background: var(--as-surface); box-shadow: var(--as-shadow); }
+.as-progress-text { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.as-progress-text strong { font-size: 28px; font-weight: 700; letter-spacing: -.02em; }
+.as-progress-text span { color: var(--as-muted); font-size: 15px; }
+.as-progress { grid-column: 1 / -1; height: 8px; border-radius: 980px; background: var(--as-selected); overflow: hidden; }
+.as-progress span { display: block; height: 100%; border-radius: inherit; background: var(--as-button); transition: width .2s ease; }
+.as-phase h2 { margin: 0 0 8px 4px; font-size: 17px; font-weight: 600; }
+.as-row-step { grid-template-columns: 44px minmax(0, 1fr); }
+.as-row-step h3 { font-weight: 500; }
+@media (max-width: 760px) { .as-row-step { grid-template-columns: 44px minmax(0, 1fr); } }
+@media (prefers-reduced-motion: reduce) { .as-progress span { transition: none; } }
+/* A checklist step is one big label: the round check and the text both tick it. */
+.as-row-step { display: block; padding: 0; }
+.as-step-label { display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 12px; min-height: 56px; padding: 6px 16px 6px 4px; cursor: pointer; }
+.as-step-text { font-size: 16px; font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; }
+.as-row[data-done="true"] .as-step-text { color: var(--as-muted); text-decoration: line-through; }
+.as-step-label:hover { background: var(--as-hover); }
+
+/* Added with journal (2026-11-14): featured card, mood chips that are links, tags and long-form prose. */
+.as-card-link { display: grid; gap: 8px; padding: 20px; border: 1px solid var(--as-line); border-radius: 18px; background: var(--as-surface); box-shadow: var(--as-shadow); color: inherit; text-decoration: none; }
+.as-card-link:hover { background: var(--as-hover); }
+.as-card-link h2 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -.01em; }
+.as-card-link p { margin: 0; color: var(--as-muted); font-size: 16px; line-height: 1.6; }
+.as-card-link .as-pill { justify-self: start; }
+.as-section { margin-top: 32px; }
+.as-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.as-section-title { margin: 0 0 12px; font-size: 20px; font-weight: 700; }
+.as-section-head .as-section-title { margin: 0; }
+.as-section-head + .as-list { margin-top: 8px; }
+.as-chip-link { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; border: 1px solid var(--as-line); border-radius: 980px; background: var(--as-surface); color: var(--as-fg); font-size: 15px; text-decoration: none; }
+.as-chip-link span { color: var(--as-muted); font-variant-numeric: tabular-nums; }
+.as-chip-link:hover { background: var(--as-hover); }
+.as-chip-link[aria-current="page"] { border-color: var(--as-fg); background: var(--as-fg); color: var(--as-bg); }
+.as-chips-filter { margin: 0 0 16px; }
+.as-chips-filter .as-chip-link { text-transform: capitalize; }
+.as-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
+.as-tags .as-pill { margin: 0; }
+.as-tag { color: var(--as-muted); font-size: 14px; }
+.as-prose { max-width: 65ch; font-size: 18px; line-height: 1.7; overflow-wrap: anywhere; }
+.as-prose h2 { margin: 28px 0 8px; font-size: 22px; font-weight: 700; }
+.as-prose h3 { margin: 24px 0 8px; font-size: 19px; font-weight: 600; }
+.as-prose p { margin: 12px 0; }
+.as-prose ul { margin: 12px 0; padding-left: 24px; list-style: disc; }
+.as-prose ol { margin: 12px 0; padding-left: 24px; list-style: decimal; }
+.as-prose li { margin: 6px 0; }
+.as-empty a { color: var(--as-accent); }
+
+/* The top bar is sticky: keep skip-link targets and keyboard-focused controls clear of it when the page scrolls to them. */
+html { scroll-padding-top: 64px; scroll-padding-bottom: calc(16px + var(--as-toast-space, 0px)); }
+/* While the Undo toast shows, the page reserves its height (set from page.tsx) so nothing focusable stays under it. */
+.as { padding-bottom: var(--as-toast-space, 0px); }
