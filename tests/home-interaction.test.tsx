@@ -17,7 +17,8 @@ let host: HTMLDivElement;
 
 const button = (text: string) => [...host.querySelectorAll("button")].find((b) => b.textContent?.trim().startsWith(text)) as HTMLButtonElement;
 const flush = async (ms = 0) => { await act(async () => { await vi.advanceTimersByTimeAsync(ms); }); };
-const click = (el: Element) => act(() => { el.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+// detail 1 = pointer click, 0 = keyboard (Enter/Space) click.
+const click = (el: Element, detail = 1) => act(() => { el.dispatchEvent(new MouseEvent("click", { bubbles: true, detail })); });
 
 beforeEach(async () => {
   vi.useFakeTimers();
@@ -129,5 +130,39 @@ describe("clear with undo", () => {
     expect(calls.find((c) => c.method === "DELETE")!.url).toContain("?upTo=2000");
     expect(host.querySelector(".as-toast")).toBeNull();
     expect(server.map((r) => r.id)).toEqual(["dddddddd-4"]);
+  });
+});
+
+describe("batch Undo", () => {
+  it("consecutive clears restore together with one Undo", async () => {
+    click(button("Clear queue"));
+    server = [{ id: "dddddddd-4", method: "PUT", headers: {}, body: "", receivedAt: 5000 }, ...server];
+    await flush(2500);
+    expect(host.querySelectorAll(".wh-req")).toHaveLength(1);
+    click(button("Clear queue"));
+    expect(host.querySelectorAll(".wh-req")).toHaveLength(0);
+    expect(host.querySelector(".as-toast span")!.textContent).toBe("Cleared 3 requests");
+    // The second Clear restarted the window and sent nothing to the server yet.
+    await flush(4000);
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+    click(button("Undo"));
+    await flush(0);
+    expect(host.querySelectorAll(".wh-req")).toHaveLength(3);
+    expect(host.querySelector('.as-sr[role="status"]')!.textContent).toBe("Restored 3 requests.");
+    await flush(UNDO_MS);
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+  });
+
+  it("keyboard remove focuses Undo; the toast stays while focused, Escape clears now and returns to the queue", async () => {
+    click(button("Clear queue"), 0);
+    expect(document.activeElement).toBe(button("Undo"));
+    await flush(UNDO_MS * 2);
+    expect(host.querySelector(".as-toast")).not.toBeNull();
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+    act(() => { host.querySelector(".as-toast")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+    await flush(0);
+    expect(host.querySelector(".as-toast")).toBeNull();
+    expect(calls.find((c) => c.method === "DELETE")!.url).toContain("?upTo=2000");
+    expect(document.activeElement?.id).toBe("queue-heading");
   });
 });

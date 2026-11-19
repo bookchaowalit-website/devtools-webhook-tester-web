@@ -48,12 +48,17 @@ export default function Home() {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [sending, setSending] = useState(false);
   const [sendFailed, setSendFailed] = useState(false);
-  // While Undo is on offer, requests received up to `upTo` are hidden but still on the server.
-  const [pendingClear, setPendingClear] = useState<{ upTo: number; count: number } | null>(null);
-  const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingRef = useRef<{ hookId: string; upTo: number } | null>(null);
+  // While Undo is on offer, requests received up to `upTo` are hidden but still on the server. Every Clear inside
+  // the window joins one batch (upTo moves forward, count adds up), so one Undo brings all of them back.
+  const [pendingClear, setPendingClear] = useState<{ upTo: number; count: number; viaKeyboard: boolean } | null>(null);
+  const pendingRef = useRef<{ hookId: string; upTo: number; count: number } | null>(null);
+  const [toastFocused, setToastFocused] = useState(false);
+  const [announcement, setAnnouncement] = useState("");
   const queueHeading = useRef<HTMLHeadingElement>(null);
   const clearButton = useRef<HTMLButtonElement>(null);
+  const undoButton = useRef<HTMLButtonElement>(null);
+  // Where focus goes once the toast has closed and the queue has re-rendered.
+  const focusAfterClose = useRef<"clear" | "queue" | null>(null);
 
   const refresh = useCallback(async (id: string) => {
     try {
@@ -80,8 +85,6 @@ export default function Home() {
 
   const commitClear = useCallback(() => {
     const pending = pendingRef.current;
-    if (clearTimer.current) clearTimeout(clearTimer.current);
-    clearTimer.current = null;
     pendingRef.current = null;
     if (!pending) return;
     void fetch("/api/hook/" + pending.hookId + "/requests?upTo=" + pending.upTo, { method: "DELETE" }).catch(() => {});
@@ -89,6 +92,26 @@ export default function Home() {
 
   // Leaving the page while Undo is on offer still clears the queue.
   useEffect(() => commitClear, [commitClear]);
+
+  // A Clear made from the keyboard moves focus to Undo (the Clear button is about to be disabled).
+  useEffect(() => { if (pendingClear?.viaKeyboard) undoButton.current?.focus(); }, [pendingClear]);
+  // The Undo window closes 6 s after the latest Clear (each Clear restarts it), but never while the toast holds focus.
+  useEffect(() => {
+    if (!pendingClear || toastFocused) return;
+    const timer = setTimeout(() => {
+      commitClear();
+      setPendingClear(null);
+    }, UNDO_MS);
+    return () => clearTimeout(timer);
+  }, [pendingClear, toastFocused, commitClear]);
+  // After Undo, back to Clear queue (enabled again); after Escape, to the queue heading.
+  useEffect(() => {
+    const target = focusAfterClose.current;
+    if (pendingClear || !target) return;
+    focusAfterClose.current = null;
+    const button = clearButton.current;
+    (target === "clear" && button && !button.disabled ? button : queueHeading.current)?.focus();
+  }, [pendingClear, requests]);
 
   // Reserve room for the toast so it never covers the last focusable control.
   useEffect(() => {
@@ -134,29 +157,35 @@ export default function Home() {
     }
   };
 
-  const handleClear = () => {
+  const handleClear = (viaKeyboard: boolean) => {
     if (!hookId || visible.length === 0) return;
-    // A second Clear while Undo is still on offer commits the first one.
-    commitClear();
-    const upTo = Math.max(...visible.map((request) => request.receivedAt));
-    pendingRef.current = { hookId, upTo };
-    setPendingClear({ upTo, count: visible.length });
+    // A second Clear while Undo is still on offer joins the first: one Undo restores both.
+    const earlier = pendingRef.current;
+    const upTo = Math.max(earlier?.upTo ?? 0, ...visible.map((request) => request.receivedAt));
+    const count = (earlier?.count ?? 0) + visible.length;
+    pendingRef.current = { hookId, upTo, count };
+    setPendingClear({ upTo, count, viaKeyboard });
     setSelectedId(null);
-    clearTimer.current = setTimeout(() => {
-      commitClear();
-      setPendingClear(null);
-    }, UNDO_MS);
-    // The Clear button is about to be disabled: keep keyboard focus on the queue.
-    queueHeading.current?.focus();
+    setAnnouncement(`Cleared ${count} ${count === 1 ? "request" : "requests"}. Undo is available for a few seconds.`);
+    // The Clear button is about to be disabled: a pointer user's focus stays on the queue.
+    if (!viaKeyboard) queueHeading.current?.focus();
   };
 
   const handleUndo = () => {
-    if (clearTimer.current) clearTimeout(clearTimer.current);
-    clearTimer.current = null;
+    const count = pendingRef.current?.count ?? 0;
     pendingRef.current = null;
+    focusAfterClose.current = "clear";
     setPendingClear(null);
-    // Undo restores the list, so Clear is enabled again on the next render.
-    setTimeout(() => clearButton.current?.focus(), 0);
+    setToastFocused(false);
+    setAnnouncement(`Restored ${count} ${count === 1 ? "request" : "requests"}.`);
+  };
+
+  // Escape: keep the clear (it is sent to the server now) and close the toast.
+  const dismissToast = () => {
+    commitClear();
+    focusAfterClose.current = "queue";
+    setPendingClear(null);
+    setToastFocused(false);
   };
 
   const payload = selected ? tryPrettyJson(selected.body) : null;
@@ -213,7 +242,7 @@ export default function Home() {
               </ul>
             )}
             <div className="as-actions-row">
-              <button type="button" ref={clearButton} className="as-plain as-danger" onClick={handleClear} disabled={visible.length === 0}>Clear queue</button>
+              <button type="button" ref={clearButton} className="as-plain as-danger" onClick={(event) => handleClear(event.detail === 0)} disabled={visible.length === 0}>Clear queue</button>
             </div>
           </section>
 
@@ -248,10 +277,18 @@ export default function Home() {
 
       <AppFoot source={SOURCE} />
 
+      <p className="as-sr" role="status" aria-live="polite">{announcement}</p>
       {pendingClear ? (
-        <div className="as-toast" role="status">
+        <div
+          className="as-toast"
+          role="group"
+          aria-label="Undo clear"
+          onFocus={() => setToastFocused(true)}
+          onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setToastFocused(false); }}
+          onKeyDown={(event) => { if (event.key === "Escape") dismissToast(); }}
+        >
           <span>Cleared {pendingClear.count} {pendingClear.count === 1 ? "request" : "requests"}</span>
-          <button type="button" className="as-plain" onClick={handleUndo}>Undo</button>
+          <button ref={undoButton} type="button" className="as-plain" onClick={handleUndo}>Undo</button>
         </div>
       ) : null}
     </div>
