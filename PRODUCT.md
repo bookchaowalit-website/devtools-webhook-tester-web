@@ -45,6 +45,11 @@ A developer wiring up a webhook sender who wants to see exactly what arrives (me
 - Every batch is sent with `keepalive`, and browsers cap in-flight keepalive bodies at 64 KiB in total; a very large
   accumulated clear (thousands of ids) can have batches refused and leave part of the queue. Codex report
   -afc9d4d0a7, P3.
+- Queue reloads are not ordered: if the reload after one Clear answers later than the reload after the next Clear,
+  the older snapshot can show already-deleted requests until the next successful poll (or longer if polling fails).
+  Codex report -932c694930, P2.
+- `app/page.tsx` also exports `UNDO_MS` and `resetHookIdCache` for tests; `next build --webpack` type-checks page
+  exports and would refuse them. The default Turbopack build (CI, Vercel) accepts them. Codex report -932c694930, P3.
 - Frozen 2026-11-20: later review findings are recorded here, not fixed.
 
 ## Live URL and deploy state

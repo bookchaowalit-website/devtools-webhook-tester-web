@@ -109,6 +109,30 @@ describe("DELETE /api/hook/[id]/requests", () => {
     expect(getRequests(HOOK_ID)).toHaveLength(1);
   });
 
+  it("refuses a body over 64 KiB with 413, by Content-Length or while streaming, and clears nothing", async () => {
+    await capture({ "content-type": "text/plain" });
+    const { DELETE } = await import("@/app/api/hook/[id]/requests/route");
+    const url = `https://webhook-tester.example/api/hook/${HOOK_ID}/requests`;
+    const big = JSON.stringify({ ids: ["x".repeat(70 * 1024)] });
+    const declared = new NextRequest(url, { method: "DELETE", body: big, headers: { "content-length": String(big.length) } });
+    expect((await DELETE(declared, { params: Promise.resolve({ id: HOOK_ID }) })).status).toBe(413);
+    // No Content-Length (a chunked stream): the read stops at the cap.
+    const encoder = new TextEncoder();
+    let pulls = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1;
+        if (pulls > 100) controller.close();
+        else controller.enqueue(encoder.encode("x".repeat(16 * 1024)));
+      },
+    });
+    const chunked = new NextRequest(url, { method: "DELETE", body: stream, duplex: "half" } as unknown as ConstructorParameters<typeof NextRequest>[1]);
+    chunked.headers.delete("content-length");
+    expect((await DELETE(chunked, { params: Promise.resolve({ id: HOOK_ID }) })).status).toBe(413);
+    expect(pulls).toBeLessThan(100);
+    expect(getRequests(HOOK_ID)).toHaveLength(1);
+  });
+
   it("clears only the listed ids, and everything without a body", async () => {
     const first = await capture({ "content-type": "text/plain" });
     expect((await del("", JSON.stringify({ ids: ["someone-else"] }))).status).toBe(200);

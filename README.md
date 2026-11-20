@@ -23,7 +23,7 @@ Live: https://webhook-tester.bookchaowalit.com (deployed by Vercel CLI; it can l
   requests: the page sends the ids it had on screen when Clear queue was pressed, so Clear can be undone for 6 s
   without losing requests that arrive meanwhile (even in the same millisecond). Only an empty body clears the whole queue; a
   whitespace-only body, bad JSON, an empty or non-string id list, more than 200 ids (the page sends larger clears in
-  batches), or the old `?upTo=` parameter is refused with 400 and clears nothing. Anyone with the hook URL can read the queue.
+  batches), or the old `?upTo=` parameter is refused with 400 and clears nothing. A body over 64 KiB gets 413 and clears nothing. Anyone with the hook URL can read the queue.
 
 ## MCP endpoint
 
