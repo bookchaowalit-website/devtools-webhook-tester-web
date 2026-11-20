@@ -30,6 +30,15 @@ A developer wiring up a webhook sender who wants to see exactly what arrives (me
 - Not durable: requests disappear after an hour idle, on a cold start, or when another serverless instance answers.
 - No privacy beyond the hook id: anyone who knows the URL can read and clear that queue.
 
+## Known limits
+
+- Undo after the queue overflowed: the queue keeps the newest 50 requests per hook, and requests waiting in the 6 s
+  Undo window are still part of it. If new webhooks push the oldest cleared ones out during that window, Undo cannot
+  bring those back, although the toast counted them. Keeping a separate pending set on the server would fix it; not
+  done for a demo tool (Codex report -061cdf0ee4).
+- Leaving the page during the Undo window sends the clear on `pagehide` with `keepalive`; a browser that kills the
+  page without `pagehide` (a crash, a force-quit) leaves the queue uncleared.
+
 ## Live URL and deploy state
 
 - Live: https://webhook-tester.bookchaowalit.com (HTTP 200 on 2026-10-23).

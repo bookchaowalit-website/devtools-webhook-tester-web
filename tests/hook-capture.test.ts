@@ -79,3 +79,31 @@ describe("POST /api/hook/[id] header capture", () => {
     expect(stored.headers["x-hub-signature-256"]).toBe("sha256=deadbeef");
   });
 });
+
+describe("DELETE /api/hook/[id]/requests", () => {
+  beforeEach(() => clearRequests(HOOK_ID));
+
+  async function del(query: string) {
+    const { DELETE } = await import("@/app/api/hook/[id]/requests/route");
+    const req = new NextRequest(`https://webhook-tester.example/api/hook/${HOOK_ID}/requests${query}`, { method: "DELETE" });
+    return DELETE(req, { params: Promise.resolve({ id: HOOK_ID }) });
+  }
+
+  it.each(["?upTo=", "?upTo=abc", "?upTo=0", "?upTo=-5", "?upTo=%20"])("refuses %s with 400 and clears nothing", async (query) => {
+    await capture({ "content-type": "text/plain" });
+    const response = await del(query);
+    expect(response.status).toBe(400);
+    expect(getRequests(HOOK_ID)).toHaveLength(1);
+  });
+
+  it("clears only up to a valid upTo, and everything without the parameter", async () => {
+    const first = await capture({ "content-type": "text/plain" });
+    expect((await del(`?upTo=${first.receivedAt - 1}`)).status).toBe(200);
+    expect(getRequests(HOOK_ID)).toHaveLength(1);
+    expect((await del(`?upTo=${first.receivedAt}`)).status).toBe(200);
+    expect(getRequests(HOOK_ID)).toHaveLength(0);
+    await capture({ "content-type": "text/plain" });
+    expect((await del("")).status).toBe(200);
+    expect(getRequests(HOOK_ID)).toHaveLength(0);
+  });
+});

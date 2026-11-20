@@ -11,7 +11,10 @@ const HOOK = "hook-under-test";
 type Req = { id: string; method: string; headers: Record<string, string>; body: string; receivedAt: number; truncated?: boolean };
 let server: Req[];
 let failList: boolean;
-let calls: { url: string; method: string }[];
+let calls: { url: string; method: string; keepalive?: boolean }[];
+// When set, DELETE waits for this promise and answers with deleteStatus.
+let deleteGate: Promise<void> | null;
+let deleteStatus: number;
 let root: Root;
 let host: HTMLDivElement;
 
@@ -27,18 +30,22 @@ beforeEach(async () => {
   resetHookIdCache();
   failList = false;
   calls = [];
+  deleteGate = null;
+  deleteStatus = 200;
   server = [
     { id: "aaaaaaaa-1", method: "POST", headers: { "content-type": "application/json" }, body: '{"a":1}', receivedAt: 2000 },
     { id: "bbbbbbbb-2", method: "GET", headers: {}, body: "plain", receivedAt: 1000, truncated: true },
   ];
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
-    calls.push({ url, method });
+    calls.push({ url, method, keepalive: init?.keepalive });
     if (url.endsWith("/requests") && method === "GET") {
       if (failList) throw new Error("offline");
       return new Response(JSON.stringify({ requests: server }));
     }
     if (url.includes("/requests?upTo=") && method === "DELETE") {
+      if (deleteGate) await deleteGate;
+      if (deleteStatus !== 200) return new Response("{}", { status: deleteStatus });
       const upTo = Number(url.split("upTo=")[1]);
       server = server.filter((r) => r.receivedAt > upTo);
       return new Response("{}");
@@ -164,5 +171,40 @@ describe("batch Undo", () => {
     expect(host.querySelector(".as-toast")).toBeNull();
     expect(calls.find((c) => c.method === "DELETE")!.url).toContain("?upTo=2000");
     expect(document.activeElement?.id).toBe("queue-heading");
+  });
+});
+
+describe("clear sent to the server", () => {
+  it("keeps the cleared requests hidden until the server answers, then shows the reloaded queue", async () => {
+    let open!: () => void;
+    deleteGate = new Promise((resolve) => { open = resolve; });
+    click(button("Clear queue"));
+    await flush(UNDO_MS);
+    expect(host.querySelector(".as-toast")).toBeNull();
+    // DELETE is in flight: still hidden, even though the list in memory is from before the clear.
+    expect(host.querySelectorAll(".wh-req")).toHaveLength(0);
+    await act(async () => { open(); });
+    await flush(0);
+    expect(host.querySelectorAll(".wh-req")).toHaveLength(0);
+    expect(host.querySelector(".wh-queue .wh-status-line")!.textContent).toBe("");
+  });
+
+  it("a refused clear brings the requests back and says so where it can be seen", async () => {
+    deleteStatus = 500;
+    click(button("Clear queue"));
+    await flush(UNDO_MS);
+    await flush(0);
+    expect(host.querySelectorAll(".wh-req")).toHaveLength(2);
+    expect(host.querySelector(".wh-queue .wh-status-line")!.textContent).toContain("was not cleared on the server");
+  });
+
+  it("leaving the page (pagehide) during the Undo window sends the clear with keepalive", async () => {
+    click(button("Clear queue"));
+    act(() => { window.dispatchEvent(new Event("pagehide")); });
+    await flush(0);
+    const sent = calls.filter((c) => c.method === "DELETE");
+    expect(sent).toHaveLength(1);
+    expect(sent[0].url).toContain("?upTo=2000");
+    expect(sent[0].keepalive).toBe(true);
   });
 });

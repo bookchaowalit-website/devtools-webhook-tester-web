@@ -52,6 +52,9 @@ export default function Home() {
   // the window joins one batch (upTo moves forward, count adds up), so one Undo brings all of them back.
   const [pendingClear, setPendingClear] = useState<{ upTo: number; count: number; viaKeyboard: boolean } | null>(null);
   const pendingRef = useRef<{ hookId: string; upTo: number; count: number } | null>(null);
+  // A clear sent to the server and not answered yet: requests up to here stay hidden meanwhile.
+  const [committingUpTo, setCommittingUpTo] = useState<number | null>(null);
+  const [clearFailed, setClearFailed] = useState(false);
   const [toastFocused, setToastFocused] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   const queueHeading = useRef<HTMLHeadingElement>(null);
@@ -83,15 +86,31 @@ export default function Home() {
     };
   }, [hookId, refresh]);
 
+  // Sends the clear. The cleared requests stay hidden until the server answers: on success the queue is
+  // reloaded, on failure they come back with a note to try again. `keepalive` lets the request finish when it
+  // is sent while the page is being left.
   const commitClear = useCallback(() => {
     const pending = pendingRef.current;
     pendingRef.current = null;
     if (!pending) return;
-    void fetch("/api/hook/" + pending.hookId + "/requests?upTo=" + pending.upTo, { method: "DELETE" }).catch(() => {});
-  }, []);
+    setCommittingUpTo(pending.upTo);
+    setClearFailed(false);
+    fetch("/api/hook/" + pending.hookId + "/requests?upTo=" + pending.upTo, { method: "DELETE", keepalive: true })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        await refresh(pending.hookId);
+      })
+      .catch(() => setClearFailed(true))
+      .finally(() => setCommittingUpTo((current) => (current === pending.upTo ? null : current)));
+  }, [refresh]);
 
-  // Leaving the page while Undo is on offer still clears the queue.
+  // Leaving the page while Undo is on offer still clears the queue: on unmount, and on pagehide (reload, close,
+  // navigation), where React cleanup does not run.
   useEffect(() => commitClear, [commitClear]);
+  useEffect(() => {
+    window.addEventListener("pagehide", commitClear);
+    return () => window.removeEventListener("pagehide", commitClear);
+  }, [commitClear]);
 
   // A Clear made from the keyboard moves focus to Undo (the Clear button is about to be disabled).
   useEffect(() => { if (pendingClear?.viaKeyboard) undoButton.current?.focus(); }, [pendingClear]);
@@ -122,7 +141,8 @@ export default function Home() {
     };
   }, [pendingClear]);
 
-  const visible = pendingClear ? requests.filter((request) => request.receivedAt > pendingClear.upTo) : requests;
+  const hiddenUpTo = Math.max(pendingClear?.upTo ?? 0, committingUpTo ?? 0);
+  const visible = hiddenUpTo ? requests.filter((request) => request.receivedAt > hiddenUpTo) : requests;
   const selected = visible.find((request) => request.id === selectedId) ?? visible[0] ?? null;
   const hookUrl = hookId && typeof window !== "undefined" ? window.location.origin + "/api/hook/" + hookId : "";
   const status = CONNECTION_TEXT[connection];
@@ -164,6 +184,7 @@ export default function Home() {
     const upTo = Math.max(earlier?.upTo ?? 0, ...visible.map((request) => request.receivedAt));
     const count = (earlier?.count ?? 0) + visible.length;
     pendingRef.current = { hookId, upTo, count };
+    setClearFailed(false);
     setPendingClear({ upTo, count, viaKeyboard });
     setSelectedId(null);
     setAnnouncement(`Cleared ${count} ${count === 1 ? "request" : "requests"}. Undo is available for a few seconds.`);
@@ -226,6 +247,7 @@ export default function Home() {
               <span className="wh-count">{visible.length} captured</span>
             </div>
             <p className="wh-connection" role="status"><span className="as-dot" data-tone={status.tone} aria-hidden="true" />{status.text}</p>
+            <p className="wh-status-line" role="alert">{clearFailed ? "The queue was not cleared on the server, so the requests are back. Press Clear queue to try again." : ""}</p>
             {visible.length === 0 ? (
               <div className="as-list"><p className="as-empty"><strong>Nothing captured yet</strong>Send a request to the address above, or press Send test. It shows up here within a few seconds.</p></div>
             ) : (

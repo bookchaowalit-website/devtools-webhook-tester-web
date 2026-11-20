@@ -20,7 +20,8 @@ Live: https://webhook-tester.bookchaowalit.com (deployed by Vercel CLI; it can l
 - Limits (`lib/webhook-store.ts`): 50 requests per hook, 200 hooks, 1 hour idle expiry, bodies cut to the first 64 KiB
   (the answer then says `"truncated": true`).
 - `GET /api/hook/<id>/requests` lists them; `DELETE` clears them (`?upTo=<ms>` clears only requests received up to
-  that time: the page uses it so Clear queue can be undone for 6 s without losing requests that arrive meanwhile). Anyone with the hook URL can read the queue.
+  that time: the page uses it so Clear queue can be undone for 6 s without losing requests that arrive meanwhile; an
+  empty or invalid `upTo` is refused with 400 and clears nothing). Anyone with the hook URL can read the queue.
 
 ## MCP endpoint
 
