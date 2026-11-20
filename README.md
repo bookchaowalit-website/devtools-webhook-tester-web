@@ -21,8 +21,9 @@ Live: https://webhook-tester.bookchaowalit.com (deployed by Vercel CLI; it can l
   (the answer then says `"truncated": true`).
 - `GET /api/hook/<id>/requests` lists them; `DELETE` clears them. A JSON body `{"ids": [...]}` clears only those
   requests: the page sends the ids it had on screen when Clear queue was pressed, so Clear can be undone for 6 s
-  without losing requests that arrive meanwhile (even in the same millisecond). No body clears the whole queue; bad
-  JSON, an empty or non-string id list, or the old `?upTo=` parameter is refused with 400 and clears nothing. Anyone with the hook URL can read the queue.
+  without losing requests that arrive meanwhile (even in the same millisecond). Only an empty body clears the whole queue; a
+  whitespace-only body, bad JSON, an empty or non-string id list, more than 200 ids (the page sends larger clears in
+  batches), or the old `?upTo=` parameter is refused with 400 and clears nothing. Anyone with the hook URL can read the queue.
 
 ## MCP endpoint
 

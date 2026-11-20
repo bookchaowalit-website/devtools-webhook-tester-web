@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { AppFoot, AppTop, Pill } from "@/components/app-shell";
+import { MAX_CLEAR_IDS } from "@/lib/webhook-store";
 import { ensureHookId, formatHeaders, formatTime, parseRequestList, tryPrettyJson } from "@/lib/webhook-view";
 
 interface CapturedRequest {
@@ -96,18 +97,24 @@ export default function Home() {
     const ids = new Set(pending.ids);
     setCommittingIds((current) => [...current, ...pending.ids]);
     setClearFailed(false);
-    fetch("/api/hook/" + pending.hookId + "/requests", {
-      method: "DELETE",
-      keepalive: true,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: pending.ids }),
-    })
-      .then(async (response) => {
+    // Repeated Clears inside one Undo window add up, so the ids go out in batches the API accepts.
+    const unique = [...ids];
+    const batches: string[][] = [];
+    for (let start = 0; start < unique.length; start += MAX_CLEAR_IDS) batches.push(unique.slice(start, start + MAX_CLEAR_IDS));
+    Promise.all(batches.map((batch) =>
+      fetch("/api/hook/" + pending.hookId + "/requests", {
+        method: "DELETE",
+        keepalive: true,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: batch }),
+      }).then((response) => {
         if (!response.ok) throw new Error("HTTP " + response.status);
         // Deleted on the server: drop them here too, so a failed reload cannot show them again.
-        setRequests((current) => current.filter((request) => !ids.has(request.id)));
-        await refresh(pending.hookId);
-      })
+        const done = new Set(batch);
+        setRequests((current) => current.filter((request) => !done.has(request.id)));
+      }),
+    ))
+      .then(() => refresh(pending.hookId))
       .catch(() => setClearFailed(true))
       .finally(() => setCommittingIds((current) => current.filter((id) => !ids.has(id))));
   }, [refresh]);

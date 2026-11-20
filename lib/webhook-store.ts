@@ -9,6 +9,8 @@ export interface CapturedRequest {
 }
 
 export const MAX_REQUESTS_PER_HOOK = 50;
+/** The most ids one DELETE /requests may name; the page sends larger clears in batches of this size. */
+export const MAX_CLEAR_IDS = 200;
 // Bounds memory: 200 hooks x 50 requests x 64 KiB at most, instead of whatever senders post.
 export const MAX_BODY_CHARS = 64 * 1024;
 const HOOK_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;

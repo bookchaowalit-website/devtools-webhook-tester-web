@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Home, { UNDO_MS, resetHookIdCache } from "@/app/page";
 import { HOOK_ID_STORAGE } from "@/lib/webhook-view";
+import { MAX_CLEAR_IDS } from "@/lib/webhook-store";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -49,6 +50,8 @@ beforeEach(async () => {
       if (deleteGate) await deleteGate;
       if (deleteStatus !== 200) return new Response("{}", { status: deleteStatus });
       const ids: string[] = JSON.parse(init?.body as string).ids;
+      // Same cap as the real route: a larger list is refused and nothing is deleted.
+      if (ids.length > MAX_CLEAR_IDS) return new Response("{}", { status: 400 });
       deletedIds.push(...ids);
       server = server.filter((r) => !ids.includes(r.id));
       return new Response("{}");
@@ -232,6 +235,19 @@ describe("clear by id (round 2)", () => {
     await flush(0);
     expect(deletedIds).toHaveLength(2);
     expect(host.querySelectorAll(".wh-req")).toHaveLength(0);
+    expect(host.querySelector(".wh-queue .wh-status-line")!.textContent).toBe("");
+  });
+
+  it("sends a clear larger than the API cap in batches, so every request is deleted", async () => {
+    server = Array.from({ length: MAX_CLEAR_IDS + 50 }, (_, i) => ({ id: "req-" + i, method: "POST", headers: {}, body: "", receivedAt: 5000 - i }));
+    await flush(2500);
+    click(button("Clear queue"));
+    await flush(UNDO_MS);
+    await flush(0);
+    const sent = calls.filter((c) => c.method === "DELETE");
+    expect(sent).toHaveLength(2);
+    expect(deletedIds).toHaveLength(MAX_CLEAR_IDS + 50);
+    expect(server).toHaveLength(0);
     expect(host.querySelector(".wh-queue .wh-status-line")!.textContent).toBe("");
   });
 });
