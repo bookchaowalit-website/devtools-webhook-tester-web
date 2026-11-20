@@ -19,9 +19,10 @@ Live: https://webhook-tester.bookchaowalit.com (deployed by Vercel CLI; it can l
   headers and every `x-vercel-*` header are dropped (`lib/redact-headers.ts`).
 - Limits (`lib/webhook-store.ts`): 50 requests per hook, 200 hooks, 1 hour idle expiry, bodies cut to the first 64 KiB
   (the answer then says `"truncated": true`).
-- `GET /api/hook/<id>/requests` lists them; `DELETE` clears them (`?upTo=<ms>` clears only requests received up to
-  that time: the page uses it so Clear queue can be undone for 6 s without losing requests that arrive meanwhile; an
-  empty or invalid `upTo` is refused with 400 and clears nothing). Anyone with the hook URL can read the queue.
+- `GET /api/hook/<id>/requests` lists them; `DELETE` clears them. A JSON body `{"ids": [...]}` clears only those
+  requests: the page sends the ids it had on screen when Clear queue was pressed, so Clear can be undone for 6 s
+  without losing requests that arrive meanwhile (even in the same millisecond). No body clears the whole queue; bad
+  JSON, an empty or non-string id list, or the old `?upTo=` parameter is refused with 400 and clears nothing. Anyone with the hook URL can read the queue.
 
 ## MCP endpoint
 

@@ -38,6 +38,9 @@ A developer wiring up a webhook sender who wants to see exactly what arrives (me
   done for a demo tool (Codex report -061cdf0ee4).
 - Leaving the page during the Undo window sends the clear on `pagehide` with `keepalive`; a browser that kills the
   page without `pagehide` (a crash, a force-quit) leaves the queue uncleared.
+- Two clears in flight at once share one failure note: if one fails, the note says the queue was not cleared even
+  if the other succeeded (each batch's hidden ids are tracked separately). Codex report -4e65497351, P3.
+- Frozen 2026-11-20: later review findings are recorded here, not fixed.
 
 ## Live URL and deploy state
 

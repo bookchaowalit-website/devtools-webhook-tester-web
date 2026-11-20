@@ -82,17 +82,18 @@ export function getRequests(hookId: string): CapturedRequest[] {
 }
 
 /**
- * Clear a hook's queue. With `upTo`, only requests received at or before that time go, so a request
- * that arrives while the page still offers Undo is kept.
+ * Clear a hook's queue. With `ids`, only those requests go, so a request that arrived after the page listed the
+ * queue (even in the same millisecond) is kept.
  */
-export function clearRequests(hookId: string, upTo?: number) {
+export function clearRequests(hookId: string, ids?: readonly string[]) {
   const store = getStore();
-  if (upTo === undefined) {
+  if (ids === undefined) {
     store.delete(hookId);
     return;
   }
   const bucket = store.get(hookId);
   if (!bucket) return;
-  bucket.requests = bucket.requests.filter((request) => request.receivedAt > upTo);
+  const gone = new Set(ids);
+  bucket.requests = bucket.requests.filter((request) => !gone.has(request.id));
   if (bucket.requests.length === 0) store.delete(hookId);
 }

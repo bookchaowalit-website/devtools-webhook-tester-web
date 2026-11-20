@@ -15,6 +15,7 @@ let calls: { url: string; method: string; keepalive?: boolean }[];
 // When set, DELETE waits for this promise and answers with deleteStatus.
 let deleteGate: Promise<void> | null;
 let deleteStatus: number;
+let deletedIds: string[];
 let root: Root;
 let host: HTMLDivElement;
 
@@ -32,6 +33,7 @@ beforeEach(async () => {
   calls = [];
   deleteGate = null;
   deleteStatus = 200;
+  deletedIds = [];
   server = [
     { id: "aaaaaaaa-1", method: "POST", headers: { "content-type": "application/json" }, body: '{"a":1}', receivedAt: 2000 },
     { id: "bbbbbbbb-2", method: "GET", headers: {}, body: "plain", receivedAt: 1000, truncated: true },
@@ -43,11 +45,12 @@ beforeEach(async () => {
       if (failList) throw new Error("offline");
       return new Response(JSON.stringify({ requests: server }));
     }
-    if (url.includes("/requests?upTo=") && method === "DELETE") {
+    if (url.endsWith("/requests") && method === "DELETE") {
       if (deleteGate) await deleteGate;
       if (deleteStatus !== 200) return new Response("{}", { status: deleteStatus });
-      const upTo = Number(url.split("upTo=")[1]);
-      server = server.filter((r) => r.receivedAt > upTo);
+      const ids: string[] = JSON.parse(init?.body as string).ids;
+      deletedIds.push(...ids);
+      server = server.filter((r) => !ids.includes(r.id));
       return new Response("{}");
     }
     if (method === "POST") {
@@ -134,7 +137,7 @@ describe("clear with undo", () => {
     await flush(2500);
     expect(host.querySelectorAll(".wh-req")).toHaveLength(1);
     await flush(UNDO_MS);
-    expect(calls.find((c) => c.method === "DELETE")!.url).toContain("?upTo=2000");
+    expect(deletedIds).toEqual(["aaaaaaaa-1", "bbbbbbbb-2"]);
     expect(host.querySelector(".as-toast")).toBeNull();
     expect(server.map((r) => r.id)).toEqual(["dddddddd-4"]);
   });
@@ -169,7 +172,7 @@ describe("batch Undo", () => {
     act(() => { host.querySelector(".as-toast")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
     await flush(0);
     expect(host.querySelector(".as-toast")).toBeNull();
-    expect(calls.find((c) => c.method === "DELETE")!.url).toContain("?upTo=2000");
+    expect(deletedIds).toEqual(["aaaaaaaa-1", "bbbbbbbb-2"]);
     expect(document.activeElement?.id).toBe("queue-heading");
   });
 });
@@ -204,7 +207,31 @@ describe("clear sent to the server", () => {
     await flush(0);
     const sent = calls.filter((c) => c.method === "DELETE");
     expect(sent).toHaveLength(1);
-    expect(sent[0].url).toContain("?upTo=2000");
+    expect(deletedIds).toEqual(["aaaaaaaa-1", "bbbbbbbb-2"]);
     expect(sent[0].keepalive).toBe(true);
+    // Sent, so it can no longer be undone: the toast is gone (a back/forward-cache restore shows no dead Undo).
+    expect(host.querySelector(".as-toast")).toBeNull();
+  });
+});
+
+describe("clear by id (round 2)", () => {
+  it("never clears a request received in the same millisecond that the page had not listed", async () => {
+    click(button("Clear queue"));
+    // Arrives after the last poll, with the same receivedAt as the newest listed request.
+    server = [{ id: "eeeeeeee-5", method: "POST", headers: {}, body: "", receivedAt: 2000 }, ...server];
+    await flush(UNDO_MS);
+    await flush(0);
+    expect(deletedIds).toEqual(["aaaaaaaa-1", "bbbbbbbb-2"]);
+    expect(server.map((r) => r.id)).toEqual(["eeeeeeee-5"]);
+  });
+
+  it("a failed reload after a successful clear does not show the deleted requests again", async () => {
+    click(button("Clear queue"));
+    failList = true;
+    await flush(UNDO_MS);
+    await flush(0);
+    expect(deletedIds).toHaveLength(2);
+    expect(host.querySelectorAll(".wh-req")).toHaveLength(0);
+    expect(host.querySelector(".wh-queue .wh-status-line")!.textContent).toBe("");
   });
 });

@@ -89,14 +89,13 @@ describe("/api/hook/[id]/requests", () => {
     expect(getRequests(HOOK)).toEqual([]);
   });
 
-  it("DELETE ?upTo= keeps requests that arrived after the page pressed Clear", async () => {
-    captureRequest(HOOK, { method: "POST", headers: {}, body: "old", receivedAt: 100 });
-    captureRequest(HOOK, { method: "POST", headers: {}, body: "new", receivedAt: 200 });
-    await clearRoute(new NextRequest(url + "?upTo=150", { method: "DELETE" }), ctx);
-    expect(getRequests(HOOK).map((r) => r.body)).toEqual(["new"]);
-    await clearRoute(new NextRequest(url + "?upTo=250", { method: "DELETE" }), ctx);
-    expect(getRequests(HOOK)).toEqual([]);
-    clearRequests("never-seen", 10);
+  it("DELETE with ids keeps a request received in the same millisecond that the page never listed", async () => {
+    const seen = captureRequest(HOOK, { method: "POST", headers: {}, body: "seen", receivedAt: 100 });
+    captureRequest(HOOK, { method: "POST", headers: {}, body: "unseen", receivedAt: 100 });
+    const del = (body: unknown) => clearRoute(new NextRequest(url, { method: "DELETE", body: JSON.stringify(body) }), ctx);
+    expect((await del({ ids: [seen.id] })).status).toBe(200);
+    expect(getRequests(HOOK).map((r) => r.body)).toEqual(["unseen"]);
+    clearRequests("never-seen", ["x"]);
     expect(getRequests("never-seen")).toEqual([]);
   });
 });

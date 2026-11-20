@@ -48,12 +48,12 @@ export default function Home() {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [sending, setSending] = useState(false);
   const [sendFailed, setSendFailed] = useState(false);
-  // While Undo is on offer, requests received up to `upTo` are hidden but still on the server. Every Clear inside
-  // the window joins one batch (upTo moves forward, count adds up), so one Undo brings all of them back.
-  const [pendingClear, setPendingClear] = useState<{ upTo: number; count: number; viaKeyboard: boolean } | null>(null);
-  const pendingRef = useRef<{ hookId: string; upTo: number; count: number } | null>(null);
+  // While Undo is on offer, the requests listed when Clear was pressed (by id) are hidden but still on the server.
+  // Every Clear inside the window joins one batch (ids add up), so one Undo brings all of them back.
+  const [pendingClear, setPendingClear] = useState<{ ids: string[]; viaKeyboard: boolean } | null>(null);
+  const pendingRef = useRef<{ hookId: string; ids: string[] } | null>(null);
   // A clear sent to the server and not answered yet: requests up to here stay hidden meanwhile.
-  const [committingUpTo, setCommittingUpTo] = useState<number | null>(null);
+  const [committingIds, setCommittingIds] = useState<string[]>([]);
   const [clearFailed, setClearFailed] = useState(false);
   const [toastFocused, setToastFocused] = useState(false);
   const [announcement, setAnnouncement] = useState("");
@@ -93,23 +93,39 @@ export default function Home() {
     const pending = pendingRef.current;
     pendingRef.current = null;
     if (!pending) return;
-    setCommittingUpTo(pending.upTo);
+    const ids = new Set(pending.ids);
+    setCommittingIds((current) => [...current, ...pending.ids]);
     setClearFailed(false);
-    fetch("/api/hook/" + pending.hookId + "/requests?upTo=" + pending.upTo, { method: "DELETE", keepalive: true })
+    fetch("/api/hook/" + pending.hookId + "/requests", {
+      method: "DELETE",
+      keepalive: true,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: pending.ids }),
+    })
       .then(async (response) => {
         if (!response.ok) throw new Error("HTTP " + response.status);
+        // Deleted on the server: drop them here too, so a failed reload cannot show them again.
+        setRequests((current) => current.filter((request) => !ids.has(request.id)));
         await refresh(pending.hookId);
       })
       .catch(() => setClearFailed(true))
-      .finally(() => setCommittingUpTo((current) => (current === pending.upTo ? null : current)));
+      .finally(() => setCommittingIds((current) => current.filter((id) => !ids.has(id))));
   }, [refresh]);
 
   // Leaving the page while Undo is on offer still clears the queue: on unmount, and on pagehide (reload, close,
   // navigation), where React cleanup does not run.
   useEffect(() => commitClear, [commitClear]);
+  // Once sent on pagehide the clear can no longer be undone, so the toast closes too (a page restored from the
+  // back/forward cache must not offer an Undo that restores nothing).
   useEffect(() => {
-    window.addEventListener("pagehide", commitClear);
-    return () => window.removeEventListener("pagehide", commitClear);
+    const onPageHide = () => {
+      if (!pendingRef.current) return;
+      commitClear();
+      setPendingClear(null);
+      setToastFocused(false);
+    };
+    window.addEventListener("pagehide", onPageHide);
+    return () => window.removeEventListener("pagehide", onPageHide);
   }, [commitClear]);
 
   // A Clear made from the keyboard moves focus to Undo (the Clear button is about to be disabled).
@@ -141,8 +157,8 @@ export default function Home() {
     };
   }, [pendingClear]);
 
-  const hiddenUpTo = Math.max(pendingClear?.upTo ?? 0, committingUpTo ?? 0);
-  const visible = hiddenUpTo ? requests.filter((request) => request.receivedAt > hiddenUpTo) : requests;
+  const hiddenIds = new Set([...(pendingClear?.ids ?? []), ...committingIds]);
+  const visible = hiddenIds.size ? requests.filter((request) => !hiddenIds.has(request.id)) : requests;
   const selected = visible.find((request) => request.id === selectedId) ?? visible[0] ?? null;
   const hookUrl = hookId && typeof window !== "undefined" ? window.location.origin + "/api/hook/" + hookId : "";
   const status = CONNECTION_TEXT[connection];
@@ -181,11 +197,11 @@ export default function Home() {
     if (!hookId || visible.length === 0) return;
     // A second Clear while Undo is still on offer joins the first: one Undo restores both.
     const earlier = pendingRef.current;
-    const upTo = Math.max(earlier?.upTo ?? 0, ...visible.map((request) => request.receivedAt));
-    const count = (earlier?.count ?? 0) + visible.length;
-    pendingRef.current = { hookId, upTo, count };
+    const ids = [...(earlier?.ids ?? []), ...visible.map((request) => request.id)];
+    const count = ids.length;
+    pendingRef.current = { hookId, ids };
     setClearFailed(false);
-    setPendingClear({ upTo, count, viaKeyboard });
+    setPendingClear({ ids, viaKeyboard });
     setSelectedId(null);
     setAnnouncement(`Cleared ${count} ${count === 1 ? "request" : "requests"}. Undo is available for a few seconds.`);
     // The Clear button is about to be disabled: a pointer user's focus stays on the queue.
@@ -193,7 +209,7 @@ export default function Home() {
   };
 
   const handleUndo = () => {
-    const count = pendingRef.current?.count ?? 0;
+    const count = pendingRef.current?.ids.length ?? 0;
     pendingRef.current = null;
     focusAfterClose.current = "clear";
     setPendingClear(null);
@@ -309,7 +325,7 @@ export default function Home() {
           onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setToastFocused(false); }}
           onKeyDown={(event) => { if (event.key === "Escape") dismissToast(); }}
         >
-          <span>Cleared {pendingClear.count} {pendingClear.count === 1 ? "request" : "requests"}</span>
+          <span>Cleared {pendingClear.ids.length} {pendingClear.ids.length === 1 ? "request" : "requests"}</span>
           <button ref={undoButton} type="button" className="as-plain" onClick={handleUndo}>Undo</button>
         </div>
       ) : null}
