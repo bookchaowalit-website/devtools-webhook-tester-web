@@ -50,6 +50,9 @@ A developer wiring up a webhook sender who wants to see exactly what arrives (me
   Codex report -932c694930, P2.
 - `app/page.tsx` also exports `UNDO_MS` and `resetHookIdCache` for tests; `next build --webpack` type-checks page
   exports and would refuse them. The default Turbopack build (CI, Vercel) accepts them. Codex report -932c694930, P3.
+- Polls are not ordered either: when a poll takes longer than 2.5 s, an older poll that fails late can switch the
+  status back to "Can't reach the server, retrying" after a newer one loaded the queue, until the next poll.
+  Codex report -0675fc619b, P2.
 - Frozen 2026-11-20: later review findings are recorded here, not fixed.
 
 ## Live URL and deploy state

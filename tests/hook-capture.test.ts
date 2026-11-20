@@ -133,6 +133,28 @@ describe("DELETE /api/hook/[id]/requests", () => {
     expect(getRequests(HOOK_ID)).toHaveLength(1);
   });
 
+  it("never clears the queue when the body read is aborted, errors, or comes up short of Content-Length", async () => {
+    await capture({ "content-type": "text/plain" });
+    const { DELETE } = await import("@/app/api/hook/[id]/requests/route");
+    const url = `https://webhook-tester.example/api/hook/${HOOK_ID}/requests`;
+    const run = (req: NextRequest) => DELETE(req, { params: Promise.resolve({ id: HOOK_ID }) });
+    type Init = ConstructorParameters<typeof NextRequest>[1];
+    // Connection dropped before the handler: no body reaches it, only an aborted signal.
+    const controller = new AbortController();
+    controller.abort();
+    expect((await run(new NextRequest(url, { method: "DELETE", signal: controller.signal }))).status).toBe(400);
+    // The stream errors before any byte arrives.
+    const failing = new ReadableStream<Uint8Array>({ pull(c) { c.error(new Error("socket reset")); } });
+    expect((await run(new NextRequest(url, { method: "DELETE", body: failing, duplex: "half" } as unknown as Init))).status).toBe(400);
+    // Content-Length promised bytes that never came.
+    const short = new NextRequest(url, { method: "DELETE", body: "", headers: { "content-length": "14" } });
+    expect((await run(short)).status).toBe(400);
+    expect(getRequests(HOOK_ID)).toHaveLength(1);
+    // A truly empty body still clears everything.
+    expect((await run(new NextRequest(url, { method: "DELETE", headers: { "content-length": "0" } }))).status).toBe(200);
+    expect(getRequests(HOOK_ID)).toHaveLength(0);
+  });
+
   it("clears only the listed ids, and everything without a body", async () => {
     const first = await capture({ "content-type": "text/plain" });
     expect((await del("", JSON.stringify({ ids: ["someone-else"] }))).status).toBe(200);
