@@ -101,6 +101,7 @@ describe("DELETE /api/hook/[id]/requests", () => {
     ["", "null"],
     ["", " "],
     ["", "\n\t "],
+    ["", "\uFEFF"],
   ])("refuses %s %s with 400 and clears nothing", async (query, body) => {
     await capture({ "content-type": "text/plain" });
     const response = await del(query, body);

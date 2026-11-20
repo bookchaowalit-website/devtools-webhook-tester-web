@@ -11,7 +11,8 @@ html, body { margin: 0; background: var(--as-bg); }
 /* The whole address wraps (no ellipsis) and one tap selects all of it. */
 .wh-url { display: block; padding: 12px 14px; border: 1px solid var(--as-field-line); border-radius: 10px; background: var(--as-bg); font-size: 15px; line-height: 1.5; overflow-wrap: anywhere; user-select: all; -webkit-user-select: all; }
 .wh-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.wh-status-line:empty { display: none; }
+/* Empty live regions stay in the accessibility tree (only hidden visually), so the first message is announced. */
+.wh-status-line:empty { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .wh-status-line { margin: 0; color: var(--as-danger); font-size: 14px; }
 .wh-footnote { margin: 0; color: var(--as-muted); font-size: 14px; line-height: 1.6; }
 .wh-grid { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: 24px; align-items: start; margin-top: 8px; }

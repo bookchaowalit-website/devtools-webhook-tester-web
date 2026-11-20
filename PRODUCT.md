@@ -40,6 +40,11 @@ A developer wiring up a webhook sender who wants to see exactly what arrives (me
   page without `pagehide` (a crash, a force-quit) leaves the queue uncleared.
 - Two clears in flight at once share one failure note: if one fails, the note says the queue was not cleared even
   if the other succeeded (each batch's hidden ids are tracked separately). Codex report -4e65497351, P3.
+- A clear split into several batches (more than 200 ids) un-hides all of its ids as soon as any batch fails, so
+  requests another batch is still deleting can show briefly until the next reload. Codex report -afc9d4d0a7, P3.
+- Every batch is sent with `keepalive`, and browsers cap in-flight keepalive bodies at 64 KiB in total; a very large
+  accumulated clear (thousands of ids) can have batches refused and leave part of the queue. Codex report
+  -afc9d4d0a7, P3.
 - Frozen 2026-11-20: later review findings are recorded here, not fixed.
 
 ## Live URL and deploy state
